@@ -57,25 +57,39 @@ client.once('ready', () => {
     connectVoice();
 
     // ==========================
-    // JAM WIB CHANNEL
+    // UPTIME CHANNEL
     // ==========================
 
-    const clockChannel = client.channels.cache.get('1514934456216059965');
+    const startTime = Date.now();
 
-    if (clockChannel) {
+    const uptimeChannel = client.channels.cache.get('1514934456216059965');
 
-        const updateClock = async () => {
+    if (uptimeChannel) {
 
-            const time = new Date().toLocaleTimeString('id-ID', {
-                timeZone: 'Asia/Jakarta',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
+        const updateUptime = async () => {
 
-            await clockChannel
-                .setName(`🕒 WIB ${time}`)
+            const uptime = Date.now() - startTime;
+
+            const days = Math.floor(uptime / 86400000);
+            const hours = Math.floor((uptime % 86400000) / 3600000);
+
+            await uptimeChannel
+                .setName(`🟢 Uptime ${days} Hari ${hours} Jam`)
                 .catch(() => {});
         };
+
+        updateUptime();
+
+        setInterval(updateUptime, 600000);
+    }
+
+    const statuses = [
+        '🛒 SKYSTORE COMMUNITY',
+        '🎫 OPEN TICKET',
+        '⭐ Trusted Store',
+        '💎 ROBUX VIA USN',
+        '🚀 SERVER BOOST'
+    ];
 
         updateClock();
 
