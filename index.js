@@ -23,30 +23,27 @@ const client = new Client({
 });
 
 // ==========================
-// ANTI DUPLICATE LOCK SYSTEM
+// ANTI DUPLICATE BOT INSTANCE
 // ==========================
 if (global.__BOT_RUNNING__) {
-    console.log("❌ Bot already running, preventing duplicate instance");
+    console.log("❌ Bot already running!");
     process.exit(0);
 }
 global.__BOT_RUNNING__ = true;
 
 // ==========================
-// GLOBAL LOCKS
+// VARIABLES
 // ==========================
 let connection;
-let readyLocked = false;
-let intervals = {
-    update: null,
-    status: null,
-    rating: null
-};
+let readyLock = false;
+const spamMap = new Map();
 
 // ==========================
-// VOICE CONNECT (SAFE)
+// VOICE CONNECT SAFE
 // ==========================
 function connectVoice() {
     try {
+
         const guild = client.guilds.cache.get(config.GUILD_ID);
         if (!guild) return;
 
@@ -61,22 +58,22 @@ function connectVoice() {
         console.log('🎵 Voice Connected');
 
         connection.on(VoiceConnectionStatus.Disconnected, () => {
-            setTimeout(connectVoice, 8000);
+            setTimeout(connectVoice, 7000);
         });
 
     } catch (err) {
         console.log('VOICE ERROR:', err.message);
-        setTimeout(connectVoice, 8000);
+        setTimeout(connectVoice, 7000);
     }
 }
 
 // ==========================
-// READY EVENT (ANTI DUPLICATE)
+// READY EVENT (SAFE)
 // ==========================
 client.once('ready', async () => {
 
-    if (readyLocked) return;
-    readyLocked = true;
+    if (readyLock) return;
+    readyLock = true;
 
     console.log(`✅ ${client.user.tag} Online`);
 
@@ -92,7 +89,7 @@ client.once('ready', async () => {
     };
 
     // ==========================
-    // SAFE UPDATE SYSTEM
+    // UPDATE SYSTEM
     // ==========================
     const updateAll = async () => {
 
@@ -106,17 +103,17 @@ client.once('ready', async () => {
             const botUp = format(Date.now() - startTime);
             const serverUp = format(process.uptime() * 1000);
 
-            // VOICE CHANNEL
+            // VOICE UPTIME
             const voice = await client.channels.fetch(config.VOICE_ID).catch(() => null);
             if (voice) {
 
                 const pingMin = Math.max(0, Math.floor(ping / 60000));
 
-                const newName =
-                    `🟢B:${botUp.d}d 🟡S:${serverUp.h}h 🔵P:${pingMin} min`;
+                const name =
+                    `🟢B:${botUp.d}d${botUp.h}h 🟡S:${serverUp.d}d${serverUp.h}h 🔵P:${pingMin} min`;
 
-                if (voice.name !== newName) {
-                    await voice.setName(newName).catch(() => {});
+                if (voice.name !== name) {
+                    await voice.setName(name).catch(() => {});
                 }
             }
 
@@ -152,16 +149,11 @@ client.once('ready', async () => {
         }
     };
 
-    // ==========================
-    // PREVENT INTERVAL DUPLICATE
-    // ==========================
-    if (!intervals.update) {
-        updateAll();
-        intervals.update = setInterval(updateAll, 60000);
-    }
+    updateAll();
+    setInterval(updateAll, 60000);
 
     // ==========================
-    // STATUS ROTATOR (NO DUPLICATE)
+    // STATUS ROTATOR
     // ==========================
     const statuses = [
         '🛒 SKYSTORE COMMUNITY',
@@ -173,48 +165,40 @@ client.once('ready', async () => {
 
     let i = 0;
 
-    if (!intervals.status) {
-        intervals.status = setInterval(() => {
-            client.user.setPresence({
-                activities: [{
-                    name: statuses[i],
-                    type: ActivityType.Watching
-                }],
-                status: 'online'
-            });
+    setInterval(() => {
+        client.user.setPresence({
+            activities: [{
+                name: statuses[i],
+                type: ActivityType.Watching
+            }],
+            status: 'online'
+        });
 
-            i = (i + 1) % statuses.length;
+        i = (i + 1) % statuses.length;
 
-        }, 20000);
-    }
-
-    // ==========================
-    // RATING MESSAGE (NO DUPLICATE)
-    // ==========================
-    if (!intervals.rating) {
-        const ratingChannel = client.channels.cache.get(config.RATING_CHANNEL);
-
-        if (ratingChannel) {
-            intervals.rating = setInterval(() => {
-                ratingChannel.send(
-                    '⭐ Sudah transaksi? Jangan lupa rating & testimoni!'
-                ).catch(() => {});
-            }, 3600000);
-        }
-    }
+    }, 20000);
 
 });
 
 // ==========================
-// MESSAGE SYSTEM (SAFE)
+// MESSAGE SYSTEM (FULL FIXED)
 // ==========================
-const spamMap = new Map();
-
 client.on('messageCreate', async (message) => {
 
     if (message.author.bot) return;
 
-    // anti invite
+    // ==========================
+    // STAFF LOG (FIXED)
+    // ==========================
+    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
+
+    if (logChannel) {
+        logChannel.send(`📌 ${message.author.tag} di #${message.channel.name}`).catch(() => {});
+    }
+
+    // ==========================
+    // ANTI INVITE
+    // ==========================
     if (
         message.content.includes('discord.gg/') ||
         message.content.includes('discord.com/invite/')
@@ -223,7 +207,9 @@ client.on('messageCreate', async (message) => {
         return message.channel.send(`${message.author} ❌ Link tidak diperbolehkan.`);
     }
 
-    // anti spam
+    // ==========================
+    // ANTI SPAM
+    // ==========================
     const now = Date.now();
 
     if (!spamMap.has(message.author.id)) {
@@ -231,9 +217,11 @@ client.on('messageCreate', async (message) => {
     }
 
     const userMessages = spamMap.get(message.author.id);
+
     userMessages.push(now);
 
     const filtered = userMessages.filter(t => now - t < 5000);
+
     spamMap.set(message.author.id, filtered);
 
     if (filtered.length >= 5) {
@@ -241,10 +229,13 @@ client.on('messageCreate', async (message) => {
         return message.channel.send(`${message.author} ⚠️ Jangan spam.`);
     }
 
-    // auto ticket
+    // ==========================
+    // AUTO TICKET MESSAGE
+    // ==========================
     if (config.PRODUCT_CHANNELS.includes(message.channel.id)) {
+
         const msg = await message.reply(
-            `🎫 Buka ticket di <#${config.OPEN_TICKET}>`
+            `🎫 Untuk pembelian silakan buka ticket di <#${config.OPEN_TICKET}>`
         );
 
         setTimeout(() => {
@@ -255,6 +246,6 @@ client.on('messageCreate', async (message) => {
 });
 
 // ==========================
-// LOGIN (ONLY ONCE)
+// LOGIN (WAJIB 1X)
 // ==========================
 client.login(process.env.TOKEN);
