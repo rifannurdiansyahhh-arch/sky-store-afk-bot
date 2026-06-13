@@ -91,19 +91,6 @@ client.once('ready', () => {
         '🚀 SERVER BOOST'
     ];
 
-        updateClock();
-
-        setInterval(updateClock, 60000);
-    }
-
-    const statuses = [
-        '🛒 SKYSTORE COMMUNITY',
-        '🎫 OPEN TICKET',
-        '⭐ Trusted Store',
-        '💎 ROBUX VIA USN',
-        '🚀 SERVER BOOST'
-    ];
-
     let i = 0;
 
     setInterval(() => {
