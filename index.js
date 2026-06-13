@@ -22,14 +22,31 @@ const client = new Client({
     ]
 });
 
-let connection;
+// ==========================
+// ANTI DUPLICATE LOCK SYSTEM
+// ==========================
+if (global.__BOT_RUNNING__) {
+    console.log("❌ Bot already running, preventing duplicate instance");
+    process.exit(0);
+}
+global.__BOT_RUNNING__ = true;
 
 // ==========================
-// VOICE CONNECT
+// GLOBAL LOCKS
+// ==========================
+let connection;
+let readyLocked = false;
+let intervals = {
+    update: null,
+    status: null,
+    rating: null
+};
+
+// ==========================
+// VOICE CONNECT (SAFE)
 // ==========================
 function connectVoice() {
     try {
-
         const guild = client.guilds.cache.get(config.GUILD_ID);
         if (!guild) return;
 
@@ -44,20 +61,22 @@ function connectVoice() {
         console.log('🎵 Voice Connected');
 
         connection.on(VoiceConnectionStatus.Disconnected, () => {
-            console.log('⚠️ Voice Reconnecting...');
-            setTimeout(connectVoice, 7000);
+            setTimeout(connectVoice, 8000);
         });
 
     } catch (err) {
         console.log('VOICE ERROR:', err.message);
-        setTimeout(connectVoice, 7000);
+        setTimeout(connectVoice, 8000);
     }
 }
 
 // ==========================
-// READY EVENT
+// READY EVENT (ANTI DUPLICATE)
 // ==========================
 client.once('ready', async () => {
+
+    if (readyLocked) return;
+    readyLocked = true;
 
     console.log(`✅ ${client.user.tag} Online`);
 
@@ -73,7 +92,7 @@ client.once('ready', async () => {
     };
 
     // ==========================
-    // UPTIME + CHANNEL UPDATE
+    // SAFE UPDATE SYSTEM
     // ==========================
     const updateAll = async () => {
 
@@ -87,17 +106,17 @@ client.once('ready', async () => {
             const botUp = format(Date.now() - startTime);
             const serverUp = format(process.uptime() * 1000);
 
-            // VOICE UPTIME
+            // VOICE CHANNEL
             const voice = await client.channels.fetch(config.VOICE_ID).catch(() => null);
             if (voice) {
 
                 const pingMin = Math.max(0, Math.floor(ping / 60000));
 
-                const name =
-                    `🟢B:${botUp.d}d${botUp.h}h 🟡S:${serverUp.d}d${serverUp.h}h 🔵P:${pingMin} min`;
+                const newName =
+                    `🟢B:${botUp.d}d 🟡S:${serverUp.h}h 🔵P:${pingMin} min`;
 
-                if (voice.name !== name) {
-                    await voice.setName(name).catch(() => {});
+                if (voice.name !== newName) {
+                    await voice.setName(newName).catch(() => {});
                 }
             }
 
@@ -133,11 +152,16 @@ client.once('ready', async () => {
         }
     };
 
-    updateAll();
-    setInterval(updateAll, 60000);
+    // ==========================
+    // PREVENT INTERVAL DUPLICATE
+    // ==========================
+    if (!intervals.update) {
+        updateAll();
+        intervals.update = setInterval(updateAll, 60000);
+    }
 
     // ==========================
-    // STATUS ROTATOR
+    // STATUS ROTATOR (NO DUPLICATE)
     // ==========================
     const statuses = [
         '🛒 SKYSTORE COMMUNITY',
@@ -149,23 +173,40 @@ client.once('ready', async () => {
 
     let i = 0;
 
-    setInterval(() => {
-        client.user.setPresence({
-            activities: [{
-                name: statuses[i],
-                type: ActivityType.Watching
-            }],
-            status: 'online'
-        });
+    if (!intervals.status) {
+        intervals.status = setInterval(() => {
+            client.user.setPresence({
+                activities: [{
+                    name: statuses[i],
+                    type: ActivityType.Watching
+                }],
+                status: 'online'
+            });
 
-        i++;
-        if (i >= statuses.length) i = 0;
+            i = (i + 1) % statuses.length;
 
-    }, 20000);
+        }, 20000);
+    }
+
+    // ==========================
+    // RATING MESSAGE (NO DUPLICATE)
+    // ==========================
+    if (!intervals.rating) {
+        const ratingChannel = client.channels.cache.get(config.RATING_CHANNEL);
+
+        if (ratingChannel) {
+            intervals.rating = setInterval(() => {
+                ratingChannel.send(
+                    '⭐ Sudah transaksi? Jangan lupa rating & testimoni!'
+                ).catch(() => {});
+            }, 3600000);
+        }
+    }
+
 });
 
 // ==========================
-// MESSAGE SYSTEM (FIX FULL)
+// MESSAGE SYSTEM (SAFE)
 // ==========================
 const spamMap = new Map();
 
@@ -173,7 +214,7 @@ client.on('messageCreate', async (message) => {
 
     if (message.author.bot) return;
 
-    // ANTI INVITE
+    // anti invite
     if (
         message.content.includes('discord.gg/') ||
         message.content.includes('discord.com/invite/')
@@ -182,7 +223,7 @@ client.on('messageCreate', async (message) => {
         return message.channel.send(`${message.author} ❌ Link tidak diperbolehkan.`);
     }
 
-    // ANTI SPAM
+    // anti spam
     const now = Date.now();
 
     if (!spamMap.has(message.author.id)) {
@@ -190,7 +231,6 @@ client.on('messageCreate', async (message) => {
     }
 
     const userMessages = spamMap.get(message.author.id);
-
     userMessages.push(now);
 
     const filtered = userMessages.filter(t => now - t < 5000);
@@ -201,30 +241,20 @@ client.on('messageCreate', async (message) => {
         return message.channel.send(`${message.author} ⚠️ Jangan spam.`);
     }
 
-    // AUTO TICKET
-    if (config.PRODUCT_CHANNELS?.includes(message.channel.id)) {
+    // auto ticket
+    if (config.PRODUCT_CHANNELS.includes(message.channel.id)) {
         const msg = await message.reply(
-            `🎫 Silakan buka ticket di <#${config.OPEN_TICKET}>`
+            `🎫 Buka ticket di <#${config.OPEN_TICKET}>`
         );
 
         setTimeout(() => {
             msg.delete().catch(() => {});
-        }, 15000);
-
-        return;
+        }, 300000);
     }
 
-    // STAFF LOG
-    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
-
-    if (logChannel) {
-        logChannel.send(
-            `📌 ${message.author.tag} di #${message.channel.name}`
-        ).catch(() => {});
-    }
 });
 
 // ==========================
-// LOGIN
+// LOGIN (ONLY ONCE)
 // ==========================
 client.login(process.env.TOKEN);
