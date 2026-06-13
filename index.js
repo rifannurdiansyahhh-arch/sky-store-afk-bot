@@ -72,15 +72,16 @@ client.once('ready', () => {
 
             const days = Math.floor(uptime / 86400000);
             const hours = Math.floor((uptime % 86400000) / 3600000);
+            const minutes = Math.floor((uptime % 3600000) / 60000);
 
             await uptimeChannel
-                .setName(`🟢 Uptime ${days} Hari ${hours} Jam`)
+                .setName(`🟢 Uptime ${days} Hari ${hours} Jam ${minutes} Menit`)
                 .catch(() => {});
         };
 
         updateUptime();
 
-        setInterval(updateUptime, 600000);
+        setInterval(updateUptime, 60000);
     }
 
     const statuses = [
@@ -92,7 +93,7 @@ client.once('ready', () => {
     ];
 
     let i = 0;
-
+    
     setInterval(() => {
 
         client.user.setPresence({
