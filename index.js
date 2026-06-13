@@ -24,9 +24,11 @@ const client = new Client({
 
 let connection;
 
+// ==========================
+// VOICE CONNECT
+// ==========================
 function connectVoice() {
     const guild = client.guilds.cache.get(config.GUILD_ID);
-
     if (!guild) return;
 
     try {
@@ -41,7 +43,6 @@ function connectVoice() {
         console.log('🎵 Voice Connected');
 
         connection.on(VoiceConnectionStatus.Disconnected, () => {
-            console.log('🔄 Reconnecting Voice...');
             setTimeout(connectVoice, 5000);
         });
 
@@ -50,56 +51,74 @@ function connectVoice() {
     }
 }
 
+// ==========================
+// READY EVENT
+// ==========================
 client.once('ready', async () => {
 
     console.log(`✅ ${client.user.tag} Online`);
 
     connectVoice();
 
-    // ==========================
-    // START TIME (WAJIB)
-    // ==========================
     const startTime = Date.now();
 
-    // ==========================
-    // UPTIME SYSTEM
-    // ==========================
-    const updateStats = async () => {
+    const format = (ms) => {
+        const d = Math.floor(ms / 86400000);
+        const h = Math.floor((ms % 86400000) / 3600000);
+        const m = Math.floor((ms % 3600000) / 60000);
+        return { d, h, m };
+    };
 
+    const getPingColor = (ping) => {
+        if (ping > 150) return '🔴';
+        if (ping > 70) return '🟡';
+        return '🔵';
+    };
+
+    const updateAll = async () => {
         try {
-            const channel = await client.channels.fetch('1514934456216059965');
-            if (!channel) return;
 
-            // BOT UPTIME
-            const botUptime = Date.now() - startTime;
+            const guild = client.guilds.cache.get(config.GUILD_ID);
+            if (!guild) return;
 
-            const bDays = Math.floor(botUptime / 86400000);
-            const bHours = Math.floor((botUptime % 86400000) / 3600000);
-
-            // SERVER UPTIME
-            const serverUptime = process.uptime() * 1000;
-
-            const sDays = Math.floor(serverUptime / 86400000);
-            const sHours = Math.floor((serverUptime % 86400000) / 3600000);
-
-            // PING
             const ping = client.ws.ping;
 
-            let pingColor = '🟢';
-            if (ping > 150) pingColor = '🔴';
-            else if (ping > 70) pingColor = '🟡';
+            const botUp = format(Date.now() - startTime);
+            const serverUp = format(process.uptime() * 1000);
 
-            await channel.setName(
-                `🟢B:${bDays}d${bHours}h 🟡S:${sDays}d${sHours}h ${pingColor}P:${ping}ms`
-            ).catch(() => {});
+            // VOICE UPTIME
+            const voice = await client.channels.fetch(config.VOICE_ID);
+            if (voice) {
+                await voice.setName(
+                    `🟢B:${botUp.d}d 🟡S:${serverUp.h}h ${getPingColor(ping)}P:${ping}ms`
+                ).catch(() => {});
+            }
+
+            // BOT STATUS
+            const botStatus = await client.channels.fetch(config.BOT_STATUS_CHANNEL);
+            if (botStatus) {
+                await botStatus.setName(`🟢 BOT ONLINE | ${ping}ms`).catch(() => {});
+            }
+
+            // MEMBER COUNT
+            const member = await client.channels.fetch(config.MEMBER_CHANNEL);
+            if (member) {
+                await member.setName(`👥 MEMBERS: ${guild.memberCount}`).catch(() => {});
+            }
+
+            // ORDER COUNT (manual / bisa diganti database nanti)
+            const order = await client.channels.fetch(config.ORDER_CHANNEL);
+            if (order) {
+                await order.setName(`💰 ORDERS: 128`).catch(() => {});
+            }
 
         } catch (err) {
-            console.log('Uptime Error:', err.message);
+            console.log('UPDATE ERROR:', err.message);
         }
     };
 
-    updateStats();
-    setInterval(updateStats, 15000);
+    updateAll();
+    setInterval(updateAll, 30000);
 
     // ==========================
     // STATUS ROTATOR
@@ -107,7 +126,7 @@ client.once('ready', async () => {
     const statuses = [
         '🛒 SKYSTORE COMMUNITY',
         '🎫 OPEN TICKET',
-        '⭐ Trusted Store',
+        '⭐ Trusted STORE',
         '💎 ROBUX VIA USN',
         '🚀 SERVER BOOST'
     ];
@@ -115,7 +134,6 @@ client.once('ready', async () => {
     let i = 0;
 
     setInterval(() => {
-
         client.user.setPresence({
             activities: [{
                 name: statuses[i],
@@ -136,42 +154,32 @@ client.once('ready', async () => {
 
     if (ratingChannel) {
         setInterval(() => {
-
             ratingChannel.send(
-                '⭐ Sudah melakukan transaksi? Jangan lupa berikan rating dan testimoni Anda. Terima kasih telah mempercayai SKYSTORE COMMUNITY.'
+                '⭐ Sudah transaksi? Jangan lupa rating & testimoni ya! Terima kasih telah menggunakan SKYSTORE COMMUNITY.'
             ).catch(() => {});
-
         }, 3600000);
     }
-
 });
 
+// ==========================
+// MESSAGE SYSTEM
+// ==========================
 const spamMap = new Map();
 
 client.on('messageCreate', async (message) => {
 
     if (message.author.bot) return;
 
-    // ==========================
-    // ANTI INVITE DISCORD
-    // ==========================
-
+    // anti invite
     if (
         message.content.includes('discord.gg/') ||
         message.content.includes('discord.com/invite/')
     ) {
-
         await message.delete().catch(() => {});
-
-        return message.channel.send(
-            `${message.author} ❌ Link Discord server lain tidak diperbolehkan.`
-        );
+        return message.channel.send(`${message.author} ❌ Link tidak diperbolehkan.`);
     }
 
-    // ==========================
-    // ANTI SPAM
-    // ==========================
-
+    // anti spam
     const now = Date.now();
 
     if (!spamMap.has(message.author.id)) {
@@ -179,59 +187,40 @@ client.on('messageCreate', async (message) => {
     }
 
     const userMessages = spamMap.get(message.author.id);
-
     userMessages.push(now);
 
-    const filtered = userMessages.filter(
-        time => now - time < 5000
-    );
-
+    const filtered = userMessages.filter(t => now - t < 5000);
     spamMap.set(message.author.id, filtered);
 
     if (filtered.length >= 5) {
-
         await message.delete().catch(() => {});
-
-        return message.channel.send(
-            `${message.author} ⚠️ Jangan spam chat.`
-        );
+        return message.channel.send(`${message.author} ⚠️ Jangan spam.`);
     }
 
-// ==========================
-// AUTO OPEN TICKET
-// ==========================
+    // auto ticket
+    if (config.PRODUCT_CHANNELS.includes(message.channel.id)) {
+        const msg = await message.reply(
+            `🎫 Buka ticket di <#${config.OPEN_TICKET}>`
+        );
 
-if (
-    config.PRODUCT_CHANNELS.includes(
-        message.channel.id
-    )
-) {
+        setTimeout(() => {
+            msg.delete().catch(() => {});
+        }, 300000);
 
-    const ticketMsg = await message.reply(
-        `🎫 Untuk melakukan pembelian silakan buka ticket di <#${config.OPEN_TICKET}>`
-    );
+        return;
+    }
 
-    setTimeout(() => {
-        ticketMsg.delete().catch(() => {});
-    }, 300000); // 5 menit
-
-    return;
-}
-
-    // ==========================
-    // STAFF LOG
-    // ==========================
-
-    const logChannel = client.channels.cache.get(
-        config.STAFF_LOG_CHANNEL
-    );
+    // staff log
+    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
 
     if (logChannel) {
-
         logChannel.send(
-            `📌 ${message.author.tag} mengirim pesan di #${message.channel.name}`
+            `📌 ${message.author.tag} di #${message.channel.name}`
         ).catch(() => {});
     }
 });
 
+// ==========================
+// LOGIN (WAJIB PALING BAWAH)
+// ==========================
 client.login(process.env.TOKEN);
