@@ -29,7 +29,6 @@ let connection;
 // ==========================
 function connectVoice() {
     try {
-
         const guild = client.guilds.cache.get(config.GUILD_ID);
         if (!guild) return;
 
@@ -54,7 +53,7 @@ function connectVoice() {
 }
 
 // ==========================
-// READY
+// READY EVENT
 // ==========================
 client.once('ready', async () => {
 
@@ -71,25 +70,26 @@ client.once('ready', async () => {
         return { d, h, m };
     };
 
-    // ==========================
-    // UPDATE CHANNEL (TIDAK DIUBAH LOGIC)
-    // ==========================
     const updateAll = async () => {
-
         try {
 
             const guild = client.guilds.cache.get(config.GUILD_ID);
             if (!guild) return;
 
-            const ping = client.ws.ping || 0;
+            // 🔥 FIX PING ALWAYS VALID
+            const ping = client.ws?.ping ?? 0;
 
             const botUp = format(Date.now() - startTime);
             const serverUp = format(process.uptime() * 1000);
 
+            // ==========================
+            // VOICE UPTIME (FIXED)
+            // ==========================
             const voice = await client.channels.fetch(config.VOICE_ID).catch(() => null);
+
             if (voice) {
 
-                const pingMin = Math.floor(ping / 60000);
+                const pingMin = Math.max(0, Math.floor(ping / 60000));
 
                 const name =
                     `🟢B:${botUp.d}d 🟡S:${serverUp.h}h 🔵P:${pingMin} min`;
@@ -99,7 +99,11 @@ client.once('ready', async () => {
                 }
             }
 
+            // ==========================
+            // BOT STATUS
+            // ==========================
             const botStatus = await client.channels.fetch(config.BOT_STATUS_CHANNEL).catch(() => null);
+
             if (botStatus) {
                 const name = `🟢 BOT ONLINE | ${ping}ms`;
                 if (botStatus.name !== name) {
@@ -107,7 +111,11 @@ client.once('ready', async () => {
                 }
             }
 
+            // ==========================
+            // MEMBER
+            // ==========================
             const member = await client.channels.fetch(config.MEMBER_CHANNEL).catch(() => null);
+
             if (member) {
                 const name = `👥 MEMBERS: ${guild.memberCount}`;
                 if (member.name !== name) {
@@ -115,7 +123,11 @@ client.once('ready', async () => {
                 }
             }
 
+            // ==========================
+            // ORDER
+            // ==========================
             const order = await client.channels.fetch(config.ORDER_CHANNEL).catch(() => null);
+
             if (order) {
                 const name = `💰 ORDERS: 128`;
                 if (order.name !== name) {
@@ -160,66 +172,50 @@ client.once('ready', async () => {
 });
 
 // ==========================
-// MESSAGE SYSTEM (FIXED TOTAL)
+// MESSAGE SYSTEM (FULL FIXED)
 // ==========================
-const spamMap = new Map();
-
 client.on('messageCreate', async (message) => {
 
     if (message.author.bot) return;
 
-    const now = Date.now();
-
     // ==========================
-    // ANTI SPAM
+    // STAFF LOG (FIXED)
     // ==========================
-    if (!spamMap.has(message.author.id)) spamMap.set(message.author.id, []);
+    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
 
-    const userMessages = spamMap.get(message.author.id);
-    userMessages.push(now);
-
-    const filtered = userMessages.filter(t => now - t < 5000);
-    spamMap.set(message.author.id, filtered);
-
-    if (filtered.length >= 5) {
-        await message.delete().catch(() => {});
-        return message.channel.send(`${message.author} ⚠️ Jangan spam.`);
+    if (logChannel) {
+        logChannel.send(
+            `📌 ${message.author.tag} mengirim di #${message.channel.name}`
+        ).catch(() => {});
     }
 
     // ==========================
-    // AUTO TICKET MESSAGE
+    // ANTI INVITE
+    // ==========================
+    if (
+        message.content.includes('discord.gg/') ||
+        message.content.includes('discord.com/invite/')
+    ) {
+        await message.delete().catch(() => {});
+        return message.channel.send(`❌ Link tidak diperbolehkan.`);
+    }
+
+    // ==========================
+    // TICKET FIX TEXT (SESUAI REQUEST)
     // ==========================
     if (config.PRODUCT_CHANNELS.includes(message.channel.id)) {
 
         const msg = await message.reply(
-            `🎫 Buka ticket di <#${config.OPEN_TICKET}>`
+            `🎫 Untuk pembelian silakan buka ticket di <#${config.OPEN_TICKET}>`
         ).catch(() => null);
 
         if (msg) {
             setTimeout(() => {
                 msg.delete().catch(() => {});
-            }, 180000); // 🔥 3 MENIT
+            }, 180000); // 3 MENIT
         }
 
         return;
-    }
-
-    // ==========================
-    // STAFF LOG AUTO DELETE 3 MENIT
-    // ==========================
-    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
-
-    if (logChannel) {
-
-        const logMsg = await logChannel.send(
-            `📌 ${message.author.tag} di #${message.channel.name}`
-        ).catch(() => null);
-
-        if (logMsg) {
-            setTimeout(() => {
-                logMsg.delete().catch(() => {});
-            }, 180000); // 🔥 3 MENIT
-        }
     }
 
 });
