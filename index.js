@@ -50,40 +50,60 @@ function connectVoice() {
     }
 }
 
-client.once('ready', () => {
+client.once('ready', async () => {
 
     console.log(`✅ ${client.user.tag} Online`);
 
     connectVoice();
 
     // ==========================
-    // UPTIME CHANNEL
+    // START TIME (WAJIB)
     // ==========================
-
     const startTime = Date.now();
 
-    const uptimeChannel = client.channels.cache.get('1514934456216059965');
+    // ==========================
+    // UPTIME SYSTEM
+    // ==========================
+    const updateStats = async () => {
 
-    if (uptimeChannel) {
+        try {
+            const channel = await client.channels.fetch('1514934456216059965');
+            if (!channel) return;
 
-        const updateUptime = async () => {
+            // BOT UPTIME
+            const botUptime = Date.now() - startTime;
 
-            const uptime = Date.now() - startTime;
+            const bDays = Math.floor(botUptime / 86400000);
+            const bHours = Math.floor((botUptime % 86400000) / 3600000);
 
-            const days = Math.floor(uptime / 86400000);
-            const hours = Math.floor((uptime % 86400000) / 3600000);
-            const minutes = Math.floor((uptime % 3600000) / 60000);
+            // SERVER UPTIME
+            const serverUptime = process.uptime() * 1000;
 
-            await uptimeChannel
-                .setName(`🟢 Uptime ${days} Hari ${hours} Jam ${minutes} Menit`)
-                .catch(() => {});
-        };
+            const sDays = Math.floor(serverUptime / 86400000);
+            const sHours = Math.floor((serverUptime % 86400000) / 3600000);
 
-        updateUptime();
+            // PING
+            const ping = client.ws.ping;
 
-        setInterval(updateUptime, 60000);
-    }
+            let pingColor = '🟢';
+            if (ping > 150) pingColor = '🔴';
+            else if (ping > 70) pingColor = '🟡';
 
+            await channel.setName(
+                `🟢B:${bDays}d${bHours}h 🟡S:${sDays}d${sHours}h ${pingColor}P:${ping}ms`
+            ).catch(() => {});
+
+        } catch (err) {
+            console.log('Uptime Error:', err.message);
+        }
+    };
+
+    updateStats();
+    setInterval(updateStats, 15000);
+
+    // ==========================
+    // STATUS ROTATOR
+    // ==========================
     const statuses = [
         '🛒 SKYSTORE COMMUNITY',
         '🎫 OPEN TICKET',
@@ -93,7 +113,7 @@ client.once('ready', () => {
     ];
 
     let i = 0;
-    
+
     setInterval(() => {
 
         client.user.setPresence({
@@ -109,9 +129,10 @@ client.once('ready', () => {
 
     }, 15000);
 
-    const ratingChannel = client.channels.cache.get(
-        config.RATING_CHANNEL
-    );
+    // ==========================
+    // RATING AUTO MESSAGE
+    // ==========================
+    const ratingChannel = client.channels.cache.get(config.RATING_CHANNEL);
 
     if (ratingChannel) {
         setInterval(() => {
@@ -122,6 +143,7 @@ client.once('ready', () => {
 
         }, 3600000);
     }
+
 });
 
 const spamMap = new Map();
