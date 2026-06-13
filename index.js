@@ -56,6 +56,32 @@ client.once('ready', () => {
 
     connectVoice();
 
+    // ==========================
+    // JAM WIB CHANNEL
+    // ==========================
+
+    const clockChannel = client.channels.cache.get('1514934456216059965');
+
+    if (clockChannel) {
+
+        const updateClock = async () => {
+
+            const time = new Date().toLocaleTimeString('id-ID', {
+                timeZone: 'Asia/Jakarta',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+
+            await clockChannel
+                .setName(`🕒 WIB ${time}`)
+                .catch(() => {});
+        };
+
+        updateClock();
+
+        setInterval(updateClock, 60000);
+    }
+
     const statuses = [
         '🛒 SKYSTORE COMMUNITY',
         '🎫 OPEN TICKET',
