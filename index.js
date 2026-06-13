@@ -22,24 +22,10 @@ const client = new Client({
     ]
 });
 
-// ==========================
-// ANTI DUPLICATE BOT INSTANCE
-// ==========================
-if (global.__BOT_RUNNING__) {
-    console.log("❌ Bot already running!");
-    process.exit(0);
-}
-global.__BOT_RUNNING__ = true;
-
-// ==========================
-// VARIABLES
-// ==========================
 let connection;
-let readyLock = false;
-const spamMap = new Map();
 
 // ==========================
-// VOICE CONNECT SAFE
+// VOICE CONNECT (STABLE)
 // ==========================
 function connectVoice() {
     try {
@@ -68,12 +54,9 @@ function connectVoice() {
 }
 
 // ==========================
-// READY EVENT (SAFE)
+// READY EVENT
 // ==========================
 client.once('ready', async () => {
-
-    if (readyLock) return;
-    readyLock = true;
 
     console.log(`✅ ${client.user.tag} Online`);
 
@@ -88,11 +71,7 @@ client.once('ready', async () => {
         return { d, h, m };
     };
 
-    // ==========================
-    // UPDATE SYSTEM
-    // ==========================
     const updateAll = async () => {
-
         try {
 
             const guild = client.guilds.cache.get(config.GUILD_ID);
@@ -103,42 +82,57 @@ client.once('ready', async () => {
             const botUp = format(Date.now() - startTime);
             const serverUp = format(process.uptime() * 1000);
 
-            // VOICE UPTIME
+            // ==========================
+            // VOICE CHANNEL (TIDAK DIUBAH FORMATNYA)
+            // ==========================
             const voice = await client.channels.fetch(config.VOICE_ID).catch(() => null);
+
             if (voice) {
 
-                const pingMin = Math.max(0, Math.floor(ping / 60000));
+                const pingMin = Math.floor(ping / 60000);
 
                 const name =
-                    `🟢B:${botUp.d}d${botUp.h}h 🟡S:${serverUp.d}d${serverUp.h}h 🔵P:${pingMin} min`;
+                    `🟢B:${botUp.d}d 🟡S:${serverUp.h}h 🔵P:${pingMin} min`;
 
                 if (voice.name !== name) {
                     await voice.setName(name).catch(() => {});
                 }
             }
 
+            // ==========================
             // BOT STATUS
+            // ==========================
             const botStatus = await client.channels.fetch(config.BOT_STATUS_CHANNEL).catch(() => null);
             if (botStatus) {
+
                 const name = `🟢 BOT ONLINE | ${ping}ms`;
+
                 if (botStatus.name !== name) {
                     await botStatus.setName(name).catch(() => {});
                 }
             }
 
+            // ==========================
             // MEMBER
+            // ==========================
             const member = await client.channels.fetch(config.MEMBER_CHANNEL).catch(() => null);
             if (member) {
+
                 const name = `👥 MEMBERS: ${guild.memberCount}`;
+
                 if (member.name !== name) {
                     await member.setName(name).catch(() => {});
                 }
             }
 
+            // ==========================
             // ORDER
+            // ==========================
             const order = await client.channels.fetch(config.ORDER_CHANNEL).catch(() => null);
             if (order) {
+
                 const name = `💰 ORDERS: 128`;
+
                 if (order.name !== name) {
                     await order.setName(name).catch(() => {});
                 }
@@ -150,6 +144,8 @@ client.once('ready', async () => {
     };
 
     updateAll();
+
+    // 🔥 dibuat stabil (anti bug Railway)
     setInterval(updateAll, 60000);
 
     // ==========================
@@ -174,27 +170,46 @@ client.once('ready', async () => {
             status: 'online'
         });
 
-        i = (i + 1) % statuses.length;
+        i++;
+        if (i >= statuses.length) i = 0;
 
     }, 20000);
 
+    // ==========================
+    // RATING AUTO MESSAGE
+    // ==========================
+    const ratingChannel = client.channels.cache.get(config.RATING_CHANNEL);
+
+    if (ratingChannel) {
+        setInterval(() => {
+            ratingChannel.send(
+                '⭐ Sudah transaksi? Jangan lupa rating & testimoni!'
+            ).catch(() => {});
+        }, 3600000);
+    }
 });
 
 // ==========================
-// MESSAGE SYSTEM (FULL FIXED)
+// MESSAGE SYSTEM (ANTI DOUBLE FIX)
 // ==========================
+const spamMap = new Map();
+const recentMessages = new Map();
+
 client.on('messageCreate', async (message) => {
 
     if (message.author.bot) return;
 
     // ==========================
-    // STAFF LOG (FIXED)
+    // ANTI DOUBLE MESSAGE FIX
     // ==========================
-    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
+    const key = `${message.author.id}-${message.content}`;
 
-    if (logChannel) {
-        logChannel.send(`📌 ${message.author.tag} di #${message.channel.name}`).catch(() => {});
+    const now = Date.now();
+    if (recentMessages.has(key)) {
+        const last = recentMessages.get(key);
+        if (now - last < 3000) return; // block duplicate 3 detik
     }
+    recentMessages.set(key, now);
 
     // ==========================
     // ANTI INVITE
@@ -210,18 +225,12 @@ client.on('messageCreate', async (message) => {
     // ==========================
     // ANTI SPAM
     // ==========================
-    const now = Date.now();
-
-    if (!spamMap.has(message.author.id)) {
-        spamMap.set(message.author.id, []);
-    }
+    if (!spamMap.has(message.author.id)) spamMap.set(message.author.id, []);
 
     const userMessages = spamMap.get(message.author.id);
-
     userMessages.push(now);
 
     const filtered = userMessages.filter(t => now - t < 5000);
-
     spamMap.set(message.author.id, filtered);
 
     if (filtered.length >= 5) {
@@ -230,22 +239,43 @@ client.on('messageCreate', async (message) => {
     }
 
     // ==========================
-    // AUTO TICKET MESSAGE
+    // AUTO TICKET
     // ==========================
     if (config.PRODUCT_CHANNELS.includes(message.channel.id)) {
 
         const msg = await message.reply(
-            `🎫 Untuk pembelian silakan buka ticket di <#${config.OPEN_TICKET}>`
-        );
+            `🎫 Buka ticket di <#${config.OPEN_TICKET}>`
+        ).catch(() => null);
 
-        setTimeout(() => {
-            msg.delete().catch(() => {});
-        }, 300000);
+        if (msg) {
+            setTimeout(() => {
+                msg.delete().catch(() => {});
+            }, 300000);
+        }
+
+        return;
     }
 
+    // ==========================
+    // STAFF LOG (AUTO DELETE 5 MENIT)
+    // ==========================
+    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
+
+    if (logChannel) {
+
+        const logMsg = await logChannel.send(
+            `📌 ${message.author.tag} di #${message.channel.name}`
+        ).catch(() => null);
+
+        if (logMsg) {
+            setTimeout(() => {
+                logMsg.delete().catch(() => {});
+            }, 300000);
+        }
+    }
 });
 
 // ==========================
-// LOGIN (WAJIB 1X)
+// LOGIN
 // ==========================
 client.login(process.env.TOKEN);
