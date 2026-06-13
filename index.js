@@ -29,6 +29,7 @@ let connection;
 // ==========================
 function connectVoice() {
     try {
+
         const guild = client.guilds.cache.get(config.GUILD_ID);
         if (!guild) return;
 
@@ -63,6 +64,9 @@ client.once('ready', async () => {
 
     const startTime = Date.now();
 
+    // ==========================
+    // FORMAT TIME SYSTEM
+    // ==========================
     const format = (ms) => {
         const d = Math.floor(ms / 86400000);
         const h = Math.floor((ms % 86400000) / 3600000);
@@ -71,28 +75,26 @@ client.once('ready', async () => {
     };
 
     const updateAll = async () => {
+
         try {
 
             const guild = client.guilds.cache.get(config.GUILD_ID);
             if (!guild) return;
 
-            // 🔥 FIX PING ALWAYS VALID
-            const ping = client.ws?.ping ?? 0;
+            const ping = client.ws?.ping || 0;
 
             const botUp = format(Date.now() - startTime);
             const serverUp = format(process.uptime() * 1000);
 
             // ==========================
-            // VOICE UPTIME (FIXED)
+            // VOICE CHANNEL (UPTIME + PING TIME)
             // ==========================
             const voice = await client.channels.fetch(config.VOICE_ID).catch(() => null);
 
             if (voice) {
 
-                const pingMin = Math.max(0, Math.floor(ping / 60000));
-
                 const name =
-                    `🟢B:${botUp.d}d 🟡S:${serverUp.h}h 🔵P:${pingMin} min`;
+                    `🟢B:${botUp.d}d ${botUp.h}h ${botUp.m}m 🟡S:${serverUp.d}d ${serverUp.h}h ${serverUp.m}m 🔵P:${botUp.m} min`;
 
                 if (voice.name !== name) {
                     await voice.setName(name).catch(() => {});
@@ -112,7 +114,7 @@ client.once('ready', async () => {
             }
 
             // ==========================
-            // MEMBER
+            // MEMBER COUNT
             // ==========================
             const member = await client.channels.fetch(config.MEMBER_CHANNEL).catch(() => null);
 
@@ -124,7 +126,7 @@ client.once('ready', async () => {
             }
 
             // ==========================
-            // ORDER
+            // ORDER CHANNEL
             // ==========================
             const order = await client.channels.fetch(config.ORDER_CHANNEL).catch(() => null);
 
@@ -140,6 +142,9 @@ client.once('ready', async () => {
         }
     };
 
+    // ==========================
+    // STABLE LOOP (ANTI LAG + ANTI DOUBLE)
+    // ==========================
     updateAll();
     setInterval(updateAll, 60000);
 
@@ -172,21 +177,36 @@ client.once('ready', async () => {
 });
 
 // ==========================
-// MESSAGE SYSTEM (FULL FIXED)
+// ANTI DUPLICATE MESSAGE CONTROL
+// ==========================
+const spamMap = new Map();
+const staffCooldown = new Map();
+
+// ==========================
+// MESSAGE SYSTEM
 // ==========================
 client.on('messageCreate', async (message) => {
 
     if (message.author.bot) return;
 
-    // ==========================
-    // STAFF LOG (FIXED)
-    // ==========================
-    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
+    const now = Date.now();
 
-    if (logChannel) {
-        logChannel.send(
-            `📌 ${message.author.tag} mengirim di #${message.channel.name}`
-        ).catch(() => {});
+    // ==========================
+    // STAFF LOG (ANTI DOUBLE)
+    // ==========================
+    const lastLog = staffCooldown.get(message.author.id) || 0;
+
+    if (now - lastLog > 5000) {
+
+        const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
+
+        if (logChannel) {
+            logChannel.send(
+                `📌 ${message.author.tag} di #${message.channel.name}`
+            ).catch(() => {});
+        }
+
+        staffCooldown.set(message.author.id, now);
     }
 
     // ==========================
@@ -201,7 +221,23 @@ client.on('messageCreate', async (message) => {
     }
 
     // ==========================
-    // TICKET FIX TEXT (SESUAI REQUEST)
+    // ANTI SPAM
+    // ==========================
+    if (!spamMap.has(message.author.id)) spamMap.set(message.author.id, []);
+
+    const userMessages = spamMap.get(message.author.id);
+    userMessages.push(now);
+
+    const filtered = userMessages.filter(t => now - t < 5000);
+    spamMap.set(message.author.id, filtered);
+
+    if (filtered.length >= 5) {
+        await message.delete().catch(() => {});
+        return message.channel.send(`⚠️ Jangan spam.`);
+    }
+
+    // ==========================
+    // AUTO TICKET MESSAGE
     // ==========================
     if (config.PRODUCT_CHANNELS.includes(message.channel.id)) {
 
@@ -212,7 +248,7 @@ client.on('messageCreate', async (message) => {
         if (msg) {
             setTimeout(() => {
                 msg.delete().catch(() => {});
-            }, 180000); // 3 MENIT
+            }, 180000);
         }
 
         return;
