@@ -147,20 +147,26 @@ client.on('messageCreate', async (message) => {
         );
     }
 
-    // ==========================
-    // AUTO OPEN TICKET
-    // ==========================
+// ==========================
+// AUTO OPEN TICKET
+// ==========================
 
-    if (
-        config.PRODUCT_CHANNELS.includes(
-            message.channel.id
-        )
-    ) {
+if (
+    config.PRODUCT_CHANNELS.includes(
+        message.channel.id
+    )
+) {
 
-        return message.reply(
-            `🎫 Untuk melakukan pembelian silakan buka ticket di <#${config.OPEN_TICKET}>`
-        );
-    }
+    const ticketMsg = await message.reply(
+        `🎫 Untuk melakukan pembelian silakan buka ticket di <#${config.OPEN_TICKET}>`
+    );
+
+    setTimeout(() => {
+        ticketMsg.delete().catch(() => {});
+    }, 300000); // 5 menit
+
+    return;
+}
 
     // ==========================
     // STAFF LOG
