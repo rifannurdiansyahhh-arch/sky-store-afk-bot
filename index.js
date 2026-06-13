@@ -25,7 +25,7 @@ const client = new Client({
 let connection;
 
 // ==========================
-// SAFE VOICE CONNECT (ANTI DROP)
+// VOICE CONNECT
 // ==========================
 function connectVoice() {
     try {
@@ -65,9 +65,6 @@ client.once('ready', async () => {
 
     const startTime = Date.now();
 
-    // ==========================
-    // FORMAT TIME
-    // ==========================
     const format = (ms) => {
         const d = Math.floor(ms / 86400000);
         const h = Math.floor((ms % 86400000) / 3600000);
@@ -76,7 +73,7 @@ client.once('ready', async () => {
     };
 
     // ==========================
-    // SAFE UPDATE SYSTEM (ANTI OVERLOAD)
+    // UPTIME + CHANNEL UPDATE
     // ==========================
     const updateAll = async () => {
 
@@ -90,57 +87,42 @@ client.once('ready', async () => {
             const botUp = format(Date.now() - startTime);
             const serverUp = format(process.uptime() * 1000);
 
-            // ==========================
-            // VOICE CHANNEL (UPTIME + PING MIN)
-            // ==========================
+            // VOICE UPTIME
             const voice = await client.channels.fetch(config.VOICE_ID).catch(() => null);
-
             if (voice) {
 
                 const pingMin = Math.max(0, Math.floor(ping / 60000));
 
-                const newName =
+                const name =
                     `🟢B:${botUp.d}d${botUp.h}h 🟡S:${serverUp.d}d${serverUp.h}h 🔵P:${pingMin} min`;
 
-                if (voice.name !== newName) {
-                    await voice.setName(newName).catch(() => {});
+                if (voice.name !== name) {
+                    await voice.setName(name).catch(() => {});
                 }
             }
 
-            // ==========================
             // BOT STATUS
-            // ==========================
             const botStatus = await client.channels.fetch(config.BOT_STATUS_CHANNEL).catch(() => null);
             if (botStatus) {
-
                 const name = `🟢 BOT ONLINE | ${ping}ms`;
-
                 if (botStatus.name !== name) {
                     await botStatus.setName(name).catch(() => {});
                 }
             }
 
-            // ==========================
-            // MEMBER COUNT
-            // ==========================
+            // MEMBER
             const member = await client.channels.fetch(config.MEMBER_CHANNEL).catch(() => null);
             if (member) {
-
                 const name = `👥 MEMBERS: ${guild.memberCount}`;
-
                 if (member.name !== name) {
                     await member.setName(name).catch(() => {});
                 }
             }
 
-            // ==========================
-            // ORDER CHANNEL
-            // ==========================
+            // ORDER
             const order = await client.channels.fetch(config.ORDER_CHANNEL).catch(() => null);
             if (order) {
-
                 const name = `💰 ORDERS: 128`;
-
                 if (order.name !== name) {
                     await order.setName(name).catch(() => {});
                 }
@@ -151,11 +133,8 @@ client.once('ready', async () => {
         }
     };
 
-    // ==========================
-    // RUN STABLE INTERVAL (ANTI LAG)
-    // ==========================
     updateAll();
-    setInterval(updateAll, 60000); // ❗ diperpanjang 60 detik supaya stabil
+    setInterval(updateAll, 60000);
 
     // ==========================
     // STATUS ROTATOR
@@ -182,8 +161,67 @@ client.once('ready', async () => {
         i++;
         if (i >= statuses.length) i = 0;
 
-    }, 20000); // ❗ lebih stabil (20 detik)
+    }, 20000);
+});
 
+// ==========================
+// MESSAGE SYSTEM (FIX FULL)
+// ==========================
+const spamMap = new Map();
+
+client.on('messageCreate', async (message) => {
+
+    if (message.author.bot) return;
+
+    // ANTI INVITE
+    if (
+        message.content.includes('discord.gg/') ||
+        message.content.includes('discord.com/invite/')
+    ) {
+        await message.delete().catch(() => {});
+        return message.channel.send(`${message.author} ❌ Link tidak diperbolehkan.`);
+    }
+
+    // ANTI SPAM
+    const now = Date.now();
+
+    if (!spamMap.has(message.author.id)) {
+        spamMap.set(message.author.id, []);
+    }
+
+    const userMessages = spamMap.get(message.author.id);
+
+    userMessages.push(now);
+
+    const filtered = userMessages.filter(t => now - t < 5000);
+    spamMap.set(message.author.id, filtered);
+
+    if (filtered.length >= 5) {
+        await message.delete().catch(() => {});
+        return message.channel.send(`${message.author} ⚠️ Jangan spam.`);
+    }
+
+    // AUTO TICKET
+    if (config.PRODUCT_CHANNELS?.includes(message.channel.id)) {
+        const msg = await message.reply(
+            `🎫 Silakan buka ticket di <#${config.OPEN_TICKET}>`
+        );
+
+        setTimeout(() => {
+            msg.delete().catch(() => {});
+        }, 15000);
+
+        return;
+    }
+
+    // STAFF LOG
+    const logChannel = client.channels.cache.get(config.STAFF_LOG_CHANNEL);
+
+    if (logChannel) {
+        logChannel.send(
+            `📌 ${message.author.tag} di #${message.channel.name}`
+        ).catch(() => {});
+    }
 });
 
 // ==========================
